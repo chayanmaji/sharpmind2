@@ -1,4 +1,5 @@
-import { generateText } from "ai";
+// app/api/chat/route.ts
+import { streamText, UIMessage, convertToModelMessages } from "ai";
 import { openai } from "@ai-sdk/openai";
 
 const MODELS = {
@@ -6,12 +7,26 @@ const MODELS = {
 }
 
 export async function POST(req: Request) {
-  const { prompt } = await req.json();
+  try {
+    const { messages }: { messages: UIMessage[] } = await req.json();
 
-  const { text } = await generateText({
-    model: openai(MODELS.GPT4),
-    prompt
-  });
+    const result = streamText({
+      model: openai(MODELS.GPT4),
+      messages: convertToModelMessages(messages),
+    });
 
-  return Response.json({ text });
+    result.usage.then((usage) => {
+      console.log({
+        messageCount: messages.length,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        totalTokens: usage.totalTokens,
+      });
+    });
+
+    return result.toUIMessageStreamResponse();
+  } catch (error) {
+    console.error("Error streaming chat completion:", error);
+    return new Response("Failed to stream chat completion", { status: 500 });
+  }
 }
